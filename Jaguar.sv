@@ -244,6 +244,8 @@ localparam CONF_STR = {
 	"FS1,JAGJ64ROMBIN;",
 	"FC2,ROM,Load Bios;",
 	"-;",
+	"OH,Cart ROM Read Mode,32-bit,8-bit;",
+	"-;",
 	"D0RC,Load Backup RAM;",
 	"D0RB,Save Backup RAM;",
 	"D0OD,Autosave,OFF,ON;",
@@ -677,7 +679,6 @@ end else begin
 	old_abus_out <= abus_out;
 	cart_diff <= cart_q1 != cart_q;
 
-
 	if (cart_rd_trig) begin
 //		xwaitl_latch <= 1'b0; // Assert this (low) until the Cart data is ready.
 	end else if (DDRAM_DOUT_READY)
@@ -687,9 +688,25 @@ end
 
 wire [1:0] cart_oe;
 
-// 32-bit cart mode...
+// 32-bit cart read mode...
+wire [31:0] cart_read_32 = (!abus_out[2]) ? DDRAM_DOUT[63:32] : DDRAM_DOUT[31:00];
+
+// 8-bit cart read mode (Jag CD BIOS, etc)...
 //
-assign cart_q1 = (!abus_out[2]) ? DDRAM_DOUT[63:32] : DDRAM_DOUT[31:00];
+// TODO - Shift the read address, too!
+//
+wire [31:0] cart_read_8  = (abus_out[1:0]==2'd0) ? DDRAM_DOUT[63:56] :
+									(abus_out[1:0]==2'd1) ? DDRAM_DOUT[55:48] :
+									(abus_out[1:0]==2'd2) ? DDRAM_DOUT[47:40] :
+									(abus_out[1:0]==2'd3) ?	DDRAM_DOUT[39:32] :
+									(abus_out[1:0]==2'd4) ? DDRAM_DOUT[31:24] :
+									(abus_out[1:0]==2'd5) ? DDRAM_DOUT[23:16] :
+									(abus_out[1:0]==2'd6) ? DDRAM_DOUT[15:08] :
+																	DDRAM_DOUT[07:00];
+
+//assign cart_q1 = (!abus_out[2]) ? DDRAM_DOUT[63:32] : DDRAM_DOUT[31:00];
+assign cart_q1 = (!status[17]) ? cart_read_32 : {4{cart_read_8}};
+
 
 wire [3:0] dram_oe = (~dram_cas_n) ? ~dram_oe_n[3:0] : 4'b0000;
 wire ram_rdy = ~ch1_64 || ~ch1_req || use_fastram;// && (ch1_ready);	// Latency kludge.

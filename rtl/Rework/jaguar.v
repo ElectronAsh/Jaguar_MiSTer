@@ -475,12 +475,14 @@ wire e_dbus_we = ~xexpl & ~rw;
 // The external data bus (ED) is driven when RW is high and XEXPL is low.
 wire [7:0] e_dbus_7_0 =
 	(os_rom_oe)         ? os_rom_q[7:0]     : // BIOS.
+	(butch_cs)          ? butch_dout[7:0]  : // CD-ROM "Butch" registers.
 	(cart_oe[0])        ? cart_q[7:0]       : // Cart ROM.
 	(joy_bus_oe)        ? joy_bus[7:0]      : // Joyports.
 	(adc_oe)            ? adc_data[7:0]     : // Joystick DAC.. no idea what the out value of this should really be.
 	8'hFF;                                    // External bus is pulled up.
 
 wire [7:0] e_dbus_15_8 =
+	(butch_cs)          ? butch_dout[15:8]  : // CD-ROM "Butch" registers.
 	(cart_oe[0])        ? cart_q[15:8]      : // Cart ROM.
 	(joy_bus_oe)        ? joy_bus[15:8]     : // Joyports.
 	8'hFF;                                    // External bus is pulled up.
@@ -767,6 +769,28 @@ eeprom eeprom_inst // FIXME: this should really be saved as a save file
 	.bram_q   ( bram_q ),
 	.bram_wr  ( bram_wr )
 );
+
+
+wire butch_cs = (!xromcsl[1] && (fx68k_byte_addr>=24'hdfff00 && fx68k_byte_addr<=24'hdfffff));
+
+wire [15:0] butch_dout;
+wire butch_irq;
+
+butch butch_inst
+(
+	.clock( sys_clk ) ,						// input  clock
+	.reset_n( xresetl ) ,					// input  reset_n
+	
+	.butch_cs( butch_cs ),					// input  butch_cs
+	
+	.cpu_addr( fx68k_byte_addr[5:0] ) ,	// input [5:0] cpu_addr
+	.cpu_din( fx68k_dout ) ,				// input [15:0] cpu_din
+	.cpu_as_n( fx68k_as_n ) ,				// input  cpu_as_n
+	.cpu_rw( fx68k_rw ) ,					// input  cpu_rw
+	.butch_dout( butch_dout ) ,			// output [15:0] butch_dout
+	.butch_irq( butch_irq ) 				// output  butch_irq
+);
+
 
 assign abus_out[23:0] = {abus[23:3], xmaska[2:0]};
 
