@@ -244,14 +244,13 @@ localparam CONF_STR = {
 	"FS1,JAGJ64ROMBIN;",
 	"FC2,ROM,Load Bios;",
 	"-;",
-	"OH,Cart ROM Read Mode,32-bit,8-bit;",
-	"-;",
 	"D0RC,Load Backup RAM;",
 	"D0RB,Save Backup RAM;",
 	"D0OD,Autosave,OFF,ON;",
 	"-;",
 	"O4,Region Setting,NTSC,PAL;",
 	"O2,Cart Checksum Patch,Off,On;",
+	"OH,Cart 32-bit Patch,Off,On;",
 	"O78,Aspect ratio,Original,Full Screen,[ARC1],[ARC2];",
 	"O9A,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 	"O56,Mouse,Disabled,JoyPort1,JoyPort2;",
@@ -688,24 +687,12 @@ end
 
 wire [1:0] cart_oe;
 
-// 32-bit cart read mode...
-wire [31:0] cart_read_32 = (!abus_out[2]) ? DDRAM_DOUT[63:32] : DDRAM_DOUT[31:00];
+wire [31:00] cart_q_sdram;    // Cart data from SDRAM.
 
-// 8-bit cart read mode (Jag CD BIOS, etc)...
-//
-// TODO - Shift the read address, too!
-//
-wire [31:0] cart_read_8  = (abus_out[1:0]==2'd0) ? DDRAM_DOUT[63:56] :
-									(abus_out[1:0]==2'd1) ? DDRAM_DOUT[55:48] :
-									(abus_out[1:0]==2'd2) ? DDRAM_DOUT[47:40] :
-									(abus_out[1:0]==2'd3) ?	DDRAM_DOUT[39:32] :
-									(abus_out[1:0]==2'd4) ? DDRAM_DOUT[31:24] :
-									(abus_out[1:0]==2'd5) ? DDRAM_DOUT[23:16] :
-									(abus_out[1:0]==2'd6) ? DDRAM_DOUT[15:08] :
-																	DDRAM_DOUT[07:00];
+wire cart_patch_32_cs = (abus_out[23:0]>=24'h800400 && abus_out[23:0]<=24'h800403 && status[17]);  // Patch 0x400-0x403.
 
-//assign cart_q1 = (!abus_out[2]) ? DDRAM_DOUT[63:32] : DDRAM_DOUT[31:00];
-assign cart_q1 = (!status[17]) ? cart_read_32 : {4{cart_read_8}};
+assign cart_q = cart_patch_32_cs ? 32'h04040404 :        // Patch the Cart ROM, to force reading as 32-bit wide (Jag CD BIOS, etc.)
+                                    cart_q_sdram;        // Else, allow normal reading of Cart data (as 32-bit wide).
 
 
 wire [3:0] dram_oe = (~dram_cas_n) ? ~dram_oe_n[3:0] : 4'b0000;
@@ -871,7 +858,7 @@ sdram sdram
 	.ch1_64             (ch1_64),
 
 	.ch2_addr           ((loader_en) ? loader_addr[22:1] : {abus_out[22:2],1'b0}),    // 25 bit address for 8bit mode. addr[0] = 0 for 16bit mode for correct operations.
-	.ch2_dout           (cart_q),             // data output to cpu
+	.ch2_dout           (cart_q_sdram),       // data output to cpu
 	.ch2_din            (loader_data_bs),     // data input from cpu
 	.ch2_req            ((loader_en) ? loader_wr & rom_index : cart_rd_trig),     // request
 	.ch2_rnw            ((loader_en) ? !loader_wr & rom_index : 1'b1),     // 1 - read, 0 - write
